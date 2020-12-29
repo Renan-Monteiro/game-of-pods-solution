@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: drupal-mysql
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: drupal-mysql
+  template:
+    metadata:
+      labels:
+        name: drupal-mysql
+      name: drupal-mysql
+    spec:
+      containers:
+      - env:
+        - name: MYSQL_DATABASE
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_DATABASE
+              name: drupal-mysql-secret
+              optional: false
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_ROOT_PASSWORD
+              name: drupal-mysql-secret
+              optional: false
+        - name: MYSQL_USER
+          valueFrom:
+            secretKeyRef:
+              key: MYSQL_USER
+              name: drupal-mysql-secret
+              optional: false
+        image: mysql:5.7
+        imagePullPolicy: IfNotPresent
+        name: drupal-mysql
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - mountPath: /var/lib/mysql
+          name: volume
+          subPath: dbdata
+      volumes:
+      - name: volume
+        persistentVolumeClaim:
+          claimName: drupal-mysql-pvc
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: drupal
+  labels:
+    app: drupal
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: drupal
+  template:
+    metadata:
+      labels:
+        app: drupal
+        name: drupal
+      name: drupal
+    spec:
+      initContainers:
+      - name: init-sites-volume
+        image: drupal:8.6
+        imagePullPolicy: IfNotPresent
+        command: ["/bin/bash","-c"]
+        args: ["cp -r /var/www/html/sites/ /data/; chown www-data:www-data /data/ -R"]
+        volumeMounts:
+        - mountPath: /data
+          name: drupal-pvc
+      containers:
+      - image: drupal:8.6
+        imagePullPolicy: IfNotPresent
+        name: drupal
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - mountPath: /var/www/html/modules
+          name: drupal-pvc
+          subPath: modules
+        - mountPath: /var/www/html/profiles
+          name: drupal-pvc
+          subPath: profiles
+        - mountPath: /var/www/html/sites
+          name: drupal-pvc
+          subPath: sites
+        - mountPath: /var/www/html/themes
+          name: drupal-pvc
+          subPath: themes
+      volumes:
+      - name: drupal-pvc
+        persistentVolumeClaim:
+          claimName: drupal-pvc
